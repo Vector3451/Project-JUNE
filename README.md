@@ -1,4 +1,4 @@
-# Project JUNE: Advanced Local AI Assistant
+# Project JUNE
 
 **Project JUNE** is a sophisticated, locally-hosted AI assistant designed for privacy, real-time voice interaction, and network security operations. It combines the power of local LLMs (Ollama) with a custom RAG (Retrieval-Augmented Generation) system and specialized network tools.
 
@@ -7,7 +7,7 @@
 *   **🎙️ Voice-First Interaction**: Integration with **Whisper (Faster-Whisper)** for lightning-fast Speech-to-Text and **Coqui TTS** for natural-sounding responses.
 *   **🧠 Dual Persona**:
     *   **June**: Your friendly, witty general assistant. Capable of searching the web, checking the weather, and answering general queries with context-aware memory.
-    *   **NetJune (Red Team Mode)**: A specialized security agent equipped with Kali Linux tools. Can execute network scans (`nmap`), check for vulnerabilities (`nikto`), and assist with cybersecurity tasks.
+    *   **NetJune**: A specialized security agent equipped with Kali Linux tools. Can execute network scans (`nmap`), check for vulnerabilities (`nmap`), and assist with cybersecurity tasks.
 *   **📚 Custom RAG System**: Ingests local documents and learns from user interactions using **ChromaDB** and **SentenceTransformers**.
 *   **🌐 Web Interface**: A modern, dark-themed Flask web app with real-time streaming responses and WebSocket support.
 *   **🔌 Hardware Integration**: Designed to run on a powerful PC server with a lightweight Raspberry Pi client for voice I/O.
@@ -72,10 +72,3 @@ Open your browser and navigate to `http://localhost:5000`.
 *   `static/`: CSS, JS, and assets.
 *   `memory_store/`: Persistent storage for RAG and conversation history.
 
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.

@@ -1,0 +1,23 @@
+# Core
+flask
+flask-socketio
+requests
+numpy
+psutil
+
+# AI & LLM
+ollama
+chromadb
+sentence-transformers
+duckduckgo-search
+
+# Voice & Audio
+sounddevice
+torch
+faster-whisper
+TTS
+nltk
+pyaudio
+
+# Hardware (Optional/Client)
+# RPi.GPIO (Only on Raspberry Pi)

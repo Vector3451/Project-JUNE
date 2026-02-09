@@ -1,0 +1,253 @@
+****************** JUNE PROMPT LIST ******************
+
+These will trigger June’s 2-step JSON tool calls.
+
+1. Open Path
+Open my Downloads folder.
+
+2. Run Command
+Run command: ipconfig /all
+
+3. Draw Image
+Draw a futuristic neon cyberpunk city at night.
+
+4. Run Code Model
+Write me a Python function that scans open ports.
+
+5. Summarize Day
+Summarize my day for me.
+
+6. Get News
+Get news about AI and cybersecurity.
+
+7. Organize Files
+Organize files in: C:\Users\Admin\Documents
+
+8. Diagnose System
+Diagnose system performance.
+
+9. Recall Diagnostics
+Show my system diagnostics history.
+
+****************** NETWORK AGENT PROMPT LIST ******************
+
+============================== NMAP TEST PROMPTS ==============================
+
+Quick scan  
+Scan 127.0.0.1  
+Scan my network  
+Scan the subnet 192.168.1.0/24  
+Discover all live hosts on 192.168.56.0/24  
+
+Full port scan  
+Run a full nmap scan on 127.0.0.1  
+Full TCP scan on 192.168.56.1  
+Find all open ports on 10.0.2.15  
+
+OS detection  
+Detect the operating system on 127.0.0.1  
+Detect OS on 192.168.56.101  
+Perform an aggressive OS fingerprinting scan  
+
+Vulnerability scan  
+Run a vulnerability scan on 127.0.0.1  
+Scan for vulnerabilities on 10.0.2.15 using scripts  
+Run all nmap vuln scripts on 192.168.1.33  
+
+Stealth & firewall evasion  
+Perform a stealth syn scan on 192.168.56.1  
+Scan without ping on 10.0.2.15  
+Evade firewall during scan: 192.168.1.55  
+Perform fragmented packet scan on 10.0.2.10  
+Scan 192.168.0.12 using decoys  
+
+Service & version detection  
+Run -sC -sV deep scan on 192.168.56.101  
+Version scan 127.0.0.1  
+
+Custom Nmap command  
+Use this custom nmap command: nmap -sC -sV 127.0.0.1  
+
+
+============================== HYDRA TEST PROMPTS ==============================
+
+SSH brute force  
+Bruteforce ssh on 127.0.0.1 using users.txt and pass.txt  
+Try SSH login brute-force on 192.168.56.101  
+
+FTP brute force  
+Bruteforce ftp on 127.0.0.1 with users.txt and pass.txt  
+Attack ftp://10.0.2.15 with credentials lists  
+
+HTTP login form brute force  
+Use hydra to attack this login page: http://127.0.0.1/login  
+Attack WordPress login: http://test.local/wp-login.php  
+Hydra brute force JSON API login endpoint  
+
+Advanced HTTP form attacks  
+Bruteforce multi-field login forms  
+Attack HTTP BasicAuth on 192.168.1.50  
+Hydra POST brute force with custom cookie header  
+
+Email brute force  
+Bruteforce POP3 on 127.0.0.1  
+Bruteforce IMAP on 10.0.2.15  
+
+SMB / RDP  
+Bruteforce SMB login on 192.168.1.33  
+Attack RDP login on 192.168.56.50  
+
+Custom Hydra command  
+Use this custom hydra command: hydra -l admin -P rockyou.txt ssh://127.0.0.1  
+
+
+============================== NIKTO TEST PROMPTS ==============================
+
+Basic website scan  
+Scan this website with nikto: http://127.0.0.1  
+Run nikto against 192.168.56.101  
+
+SSL-focused scan  
+Run an SSL nikto scan on https://127.0.0.1  
+Scan HTTPS site with Nikto: https://example.com  
+
+Advanced vulnerability checks  
+Nikto on 192.168.1.22 with XSS/RFI tests  
+Deep scan for outdated software versions  
+
+Custom Nikto command  
+Use a custom nikto command: nikto -h http://127.0.0.1 -Tuning 5  
+
+
+============================== WIFITE TEST PROMPTS ==============================
+
+Basic  
+run wifite  
+
+Interface specific  
+start wifite on wlan0  
+
+Natural-language  
+perform a wifi handshake attack using wifite  
+
+PMKID / advanced  
+run a PMKID attack on wlan0  
+capture wifi handshakes using wifite on interface wlan1  
+
+Stress/debug  
+run wifite against all nearby networks  
+
+
+============================== METASPLOIT TEST PROMPTS ==============================
+
+Basic  
+run metasploit on 127.0.0.1  
+open msfconsole and scan 10.0.2.15  
+
+Specify module  
+use metasploit auxiliary scanner port scan on 127.0.0.1  
+use exploit/windows/smb/ms17_010_eternalblue on 10.0.2.5  
+
+Natural-language  
+exploit the target using metasploit: 10.0.2.15  
+
+Payload/Exploit tests  
+run a reverse shell exploit on 192.168.56.101  
+
+Post-exploitation  
+gather system info after exploit on 10.0.2.15  
+enumerate installed software on exploited host  
+
+Stress/debug  
+launch metasploit tcp port scan on 10.0.2.5 using default module  
+
+
+============================== WIRESHARK / TSHARK TEST PROMPTS ==============================
+
+Basic capture  
+capture packets on eth0 with wireshark  
+
+Time-limited  
+start tshark for 20 seconds on interface eth0  
+
+Filtered capture  
+capture only http packets on eth0  
+sniff DNS traffic for 15 seconds  
+
+Natural-language  
+perform a network packet capture for 30 seconds using wireshark  
+
+Stress/debug  
+sniff traffic on wlan0 for 10 seconds with tshark  
+capture all packets on all interfaces for 5 seconds  
+
+
+============================== BURPSUITE TEST PROMPTS ==============================
+
+Spider  
+run burpsuite spider on http://example.com  
+
+Vulnerability scan  
+run burpsuite scan on http://testphp.vulnweb.com  
+
+Natural-language  
+perform a burp spider scan on this url: http://example.com  
+
+Intruder/fuzzing  
+fuzz parameters on http://example.com/api?user=1  
+brute force directories using BurpSuite  
+
+Stress  
+start burpsuite scanning on http://example.com/login  
+
+
+============================== SQLMAP TEST PROMPTS ==============================
+
+Basic  
+run sqlmap on http://testphp.vulnweb.com/listproducts.php?cat=1  
+
+Natural-language  
+test this url with sqlmap: http://example.com/?id=2  
+
+Advanced flags  
+sqlmap on http://example.com/product.php?id=3 with --batch --risk=3 --level=5  
+run sqlmap dump database on http://10.0.2.15/item.php?id=4  
+
+Stress  
+scan http://testphp.vulnweb.com/search.php?q=item using sqlmap  
+
+
+============================== RED TEAM MODE TEST PROMPTS ==============================
+
+Full pipeline  
+start red team mode on 10.0.2.15  
+
+Recon only  
+run red team recon on 127.0.0.1  
+
+Natural-language  
+perform a full red team operation (recon exploit post) on 10.0.2.5  
+
+Exploit phase  
+execute red team exploit phase on 192.168.56.101  
+
+Post-exploitation  
+run red team post exploitation tasks on 10.0.2.15  
+
+Stress/debug  
+enable attack mode on target 10.0.2.20  
+
+
+============================== COMBINED TOOL TEST PROMPTS ==============================
+
+Multi-step reasoning  
+enumerate this host with nmap, then run metasploit on it: 127.0.0.1  
+
+JSON parsing / multi-tool sequencing  
+scan 127.0.0.1 with nmap, then run sqlmap on http://example.com  
+
+Network Agent fallback  
+use hydra ssh on 10.0.2.15 with users.txt and pass.txt  
+
+Multi-tool chain  
+Nmap full scan → Hydra brute-force → Nikto check on 192.168.56.101  

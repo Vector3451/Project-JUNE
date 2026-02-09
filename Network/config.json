@@ -1,0 +1,6 @@
+{
+    "kali_host": "127.0.0.1",
+    "kali_user": "kali",
+    "kali_password": "fivenine",
+    "ssh_port": 2222
+}

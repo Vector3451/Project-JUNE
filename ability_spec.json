@@ -1,0 +1,21 @@
+{
+    "name": "unknown_repo",
+    "description": "Tool abilities auto-loaded from GitHub repository.",
+    "version": "1.0",
+
+    "tools": [
+        {
+            "tool_name": "example_tool",
+            "entry_file": "main.py",
+            "entry_function": "run",
+            "description": "Example tool that demonstrates how repo-based tools work.",
+            "params": {
+                "text": {
+                    "type": "string",
+                    "required": false,
+                    "default": "hello"
+                }
+            }
+        }
+    ]
+}

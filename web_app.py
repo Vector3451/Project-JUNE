@@ -645,15 +645,36 @@ def handle_stream_chat(data):
             # It yields chunks of text (and tool outputs)
             gen = ask_ollama_chat(user_message, model, stream=True)
             full_response = ""
+            suppress_stream = False
 
             for chunk in gen:
-                # If chunk is a string, emit it
                 if isinstance(chunk, str):
                     full_response += chunk
-                    emit('stream_chunk', {'chunk': chunk})
+                    
+                    # Detect start of JSON block (usually \n{ or just { near the end)
+                    if not suppress_stream:
+                        # More aggressive check for JSON opening
+                        if "{" in chunk and ("tool" in chunk or "tool" in full_response or '"' in chunk):
+                            # Start buffering/suppressing once we see the brace if it looks like JSON
+                            suppress_stream = True
+                            pre_json = chunk.split("{")[0]
+                            if pre_json:
+                                emit('stream_chunk', {'chunk': pre_json})
+                        else:
+                            emit('stream_chunk', {'chunk': chunk})
                 
             # Stream complete
             emit('stream_complete', {'response': full_response, 'timestamp': datetime.now().isoformat()})
+            
+            # [NEW] Voice feedback for streaming responses
+            if voice_enabled_global and full_response:
+                try:
+                    # Clean the full response of any tool calls before speaking
+                    clean_response, _, _ = extract_tool_call(full_response)
+                    if clean_response:
+                        speak_async(clean_response)
+                except Exception as e:
+                    print(f"[ERROR] speak_async failed: {e}")
 
     except Exception as e:
         print(f"[ERROR][Socket] Stream error: {e}")

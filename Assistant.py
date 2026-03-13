@@ -16,7 +16,6 @@ import requests
 import psutil
 import atexit
 import smtplib # Added for potential email alerts
-import pi_controller # [NEW] Raspberry Pi Controller
 import tempfile
 import logging
 from TTS.api import TTS
@@ -30,6 +29,27 @@ from Network.tool_gateway import execute_network_tool as network_gateway
 
 from Learning.memory_manager import MemoryManager
 from Learning.tool_registry import search_github_repos, github_acquire_tools
+
+def get_vram_info():
+    try:
+        if torch.cuda.is_available():
+            used = torch.cuda.memory_allocated() / (1024 ** 2) # MB
+            total = torch.cuda.get_device_properties(0).total_memory / (1024 ** 2) # MB
+            return used, total
+    except Exception:
+        pass
+    return 0, 0
+
+def flush_vram():
+    try:
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            import gc
+            gc.collect()
+            return True
+    except Exception:
+        pass
+    return False
 
 # ========== ABILITIES ==========
 with open("ability_spec.json", "r") as f:

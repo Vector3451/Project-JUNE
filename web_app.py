@@ -11,6 +11,11 @@ from datetime import datetime
 import os
 import tempfile
 import re
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # python-dotenv not installed; API keys must be set in environment
 from Assistant import (
     execute_tool,
     speak_async,
@@ -20,9 +25,13 @@ from Assistant import (
     listen_once,
     transcribe_file,
     ask_ollama_chat,
+    get_vram_info,
+    flush_vram,
 )
 
-app = Flask(__name__)
+import os as _os
+_static = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'templates', 'static')
+app = Flask(__name__, template_folder='templates', static_folder=_static, static_url_path='/static')
 app.config['SECRET_KEY'] = 'june_ai_assistant_secret'
 # Increase ping interval to reduce "looping" feeling and increase timeout for stability
 socketio = SocketIO(app, cors_allowed_origins="*", ping_timeout=60, ping_interval=25)
@@ -95,7 +104,8 @@ def network_chat():
         if not user_message:
             return jsonify({"error": "Empty message"}), 400
 
-        result = run_network_agent(user_message, model=model)
+        result = run_network_agent(user_message, model=model,
+                                   ctf_mode=bool(data.get('ctf_mode', False)))
 
         return jsonify({
             "response": result,
@@ -182,8 +192,9 @@ def chat():
             AGENT_CONTEXT["last_agent"] = "june"
 
             reply = ask_ollama_chat(user_message, model)
-            if not isinstance(reply, str):
-                reply = str(reply)
+            # BUG #4 FIX: None return (e.g. empty model output) was cast to "None" string.
+            if not reply or not isinstance(reply, str):
+                reply = "[No response generated. Please try again.]"
 
             # ALWAYS check for tool calls
             natural_text, tool_name, tool_args = extract_tool_call(reply)
@@ -245,7 +256,9 @@ def tool():
         # Voice feedback for tool results (if enabled)
         if voice_enabled_global and isinstance(result, str) and result.strip():
             try:
-                threading.Thread(target=speak_async, args=(result,), daemon=True).start()
+                # BUG #3 FIX: speak_async() already creates its own thread internally.
+                # Wrapping it in another Thread caused double TTS playback.
+                speak_async(result)
             except Exception:
                 pass
 
@@ -437,9 +450,15 @@ def system_stats():
     try:
         import psutil
 
+        used, total = get_vram_info()
         stats = {
             'cpu_percent': psutil.cpu_percent(interval=1),
             'memory': psutil.virtual_memory()._asdict(),
+            'vram': {
+                'used': used,
+                'total': total,
+                'free': total - used
+            },
             'disk': psutil.disk_usage('/')._asdict(),
             'timestamp': datetime.now().isoformat()
         }
@@ -515,9 +534,206 @@ def reset_network_memory():
     return jsonify({"message": "Network AI memory reset."})
 
 
+# ─────────────────────────────────────────────────────────────────
+# AGENT LAB  —  /api/agent-lab/plan
+# ─────────────────────────────────────────────────────────────────
+AGENT_LAB_SPEC_SYSTEM = """You are a senior software architect and technical planner.
+Your job is to produce a concise, actionable specification for a software feature.
+
+Respond ONLY with valid JSON in this exact format, no markdown fences:
+{
+  "proposal": "<2-4 paragraph markdown description of what will be built, why, and key design decisions>",
+  "tasks": [
+    "<atomic task 1 — max 1 sentence, specific file path if possible>",
+    "<atomic task 2>",
+    ...
+  ]
+}
+
+Rules:
+- Each task must be completable in <5 minutes by a coding LLM.
+- Tasks must be sequential and dependency-ordered.
+- Maximum 8 tasks. Prefer fewer, well-scoped tasks.
+- No placeholders. Be concrete."""
+
+
+def _call_openrouter(model_id: str, messages: list) -> str:
+    """Call OpenRouter Chat Completions API."""
+    import urllib.request
+    import urllib.error
+    
+    api_key = os.environ.get('OPENROUTER_API_KEY')
+    if not api_key:
+        raise RuntimeError("OPENROUTER_API_KEY is not set in .env")
+
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}",
+        "HTTP-Referer": "http://localhost:5000",
+        "X-Title": "JUNE AI"
+    }
+    
+    payload = {
+        "model": model_id.replace("openrouter:", ""),
+        "messages": messages,
+        "temperature": 0.2
+    }
+    
+    req = urllib.request.Request(url, json.dumps(payload).encode('utf-8'), headers)
+    
+    try:
+        with urllib.request.urlopen(req) as response:
+            resp_data = json.loads(response.read().decode())
+            return resp_data['choices'][0]['message']['content']
+    except urllib.error.HTTPError as e:
+        err_msg = e.read().decode('utf-8')
+        raise RuntimeError(f"OpenRouter API Error {e.code}: {err_msg}")
+    except Exception as e:
+        raise RuntimeError(f"Failed to connect to OpenRouter: {e}")
+
+def _call_local_ollama(model: str, messages: list) -> str:
+    """Call local Ollama /api/chat."""
+    payload = {'model': model, 'messages': messages, 'stream': False}
+    resp = requests.post('http://localhost:11434/api/chat', json=payload, timeout=120)
+    resp.raise_for_status()
+    return resp.json()['message']['content']
+
+
+def _plan_with_model(planner_type: str, planner_model: str, feature_request: str, context: str) -> dict:
+    """Call the appropriate planner and parse its JSON spec response."""
+    user_content = f"Feature request: {feature_request}"
+    if context:
+        user_content += f"\n\nProject context: {context}"
+
+    messages = [
+        {'role': 'system', 'content': AGENT_LAB_SPEC_SYSTEM},
+        {'role': 'user',   'content': user_content}
+    ]
+
+    if planner_type == 'openrouter':
+        raw = _call_openrouter(planner_model, messages)
+    else:  # local
+        raw = _call_local_ollama(planner_model, messages)
+
+    # Strip any accidental markdown fences
+    raw = re.sub(r'^```[\w]*\n?', '', raw.strip(), flags=re.MULTILINE)
+    raw = re.sub(r'```$', '', raw.strip(), flags=re.MULTILINE)
+    spec = json.loads(raw.strip())
+    return spec
+
+
+@app.route('/api/agent-lab/plan', methods=['POST'])
+def agent_lab_plan():
+    """OpenSpec planning phase — generates proposal + task list."""
+    try:
+        data          = request.json or {}
+        feature_req   = (data.get('request') or '').strip()
+        context       = (data.get('context') or '').strip()
+        planner_type  = (data.get('planner_type') or 'local').lower()
+        planner_model = (data.get('planner_model') or 'june:latest')
+
+        if not feature_req:
+            return jsonify({'error': 'No feature request provided'}), 400
+
+        spec = _plan_with_model(planner_type, planner_model, feature_req, context)
+
+        # Save to workspace
+        slug = re.sub(r'[^a-z0-9]+', '-', feature_req.lower())[:40]
+        ws_dir = os.path.join(os.path.dirname(__file__), 'workspaces', 'specs', slug)
+        os.makedirs(ws_dir, exist_ok=True)
+        with open(os.path.join(ws_dir, 'proposal.md'), 'w', encoding='utf-8') as f:
+            f.write(spec.get('proposal', ''))
+        with open(os.path.join(ws_dir, 'tasks.md'), 'w', encoding='utf-8') as f:
+            f.write('\n'.join(f"{i+1}. {t}" for i, t in enumerate(spec.get('tasks', []))))
+
+        return jsonify({
+            'proposal': spec.get('proposal', ''),
+            'tasks':    spec.get('tasks', []),
+            'workspace': ws_dir,
+            'timestamp': datetime.now().isoformat()
+        })
+
+    except json.JSONDecodeError as e:
+        return jsonify({'error': f'Planner returned invalid JSON: {e}'}), 500
+    except RuntimeError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        print(f'[ERROR][AgentLab/plan] {e}')
+        return jsonify({'error': f'Planning error: {e}'}), 500
+
+
 @socketio.on('connect')
 def handle_connect():
     emit('status', {'message': 'Connected to June AI Assistant'})
+
+
+@socketio.on('set_mode')
+def handle_set_mode(data):
+    """Sync ACTIVE_MODE when the user picks a model from the drawer."""
+    global ACTIVE_MODE
+    mode = data.get('mode', 'standard')
+    ACTIVE_MODE = mode
+    emit('mode_change', {'mode': mode})
+
+
+# ─────────────────────────────────────────────────────────────────
+# AGENT LAB  —  al_execute  (Socket.IO streaming execution)
+# ─────────────────────────────────────────────────────────────────
+@socketio.on('al_execute')
+def handle_al_execute(data):
+    """SADD execution loop — dispatches each task to the coder model and streams progress."""
+    tasks       = data.get('tasks', [])
+    proposal    = data.get('proposal', '')
+    coder_type  = (data.get('coder_type') or 'local').lower()
+    coder_model = (data.get('coder_model') or 'june:latest')
+
+    if not tasks:
+        emit('al_error', {'message': 'No tasks provided.'})
+        return
+
+    CODER_SYSTEM = (
+        "You are an expert software engineer. "
+        "You will be given a single, small, clearly-defined task. "
+        "Implement it completely, returning only the relevant code or explanation. "
+        "Be concise and precise. Do NOT add extra commentary."
+    )
+
+    completed = []
+    try:
+        for i, task in enumerate(tasks):
+            emit('al_chunk', {'text': f'[TASK {i+1}/{len(tasks)}] {task}'})
+
+            messages = [
+                {'role': 'system', 'content': CODER_SYSTEM},
+                {'role': 'user',   'content': f"Project context:\n{proposal}\n\nTask: {task}"}
+            ]
+
+            try:
+                if coder_type == 'openrouter':
+                    result = _call_openrouter(coder_model, messages)
+                else:
+                    result = _call_local_ollama(coder_model, messages)
+
+                completed.append({'task': task, 'result': result})
+                emit('al_chunk', {'text': result[:600] + ('...' if len(result) > 600 else '')})
+                emit('al_checkpoint', {
+                    'message': f'Task {i+1} complete — {task[:60]}'
+                })
+
+            except Exception as task_err:
+                emit('al_chunk', {'text': f'[TASK ERROR] {task_err}'})
+                completed.append({'task': task, 'result': f'ERROR: {task_err}'})
+
+        summary_parts = [f"### Task {i+1}\n**{t['task']}**\n\n{t['result'][:400]}" for i, t in enumerate(completed)]
+        emit('al_complete', {
+            'message': f'All {len(tasks)} tasks executed.',
+            'summary': '\n\n---\n\n'.join(summary_parts)
+        })
+
+    except Exception as e:
+        print(f'[ERROR][al_execute] {e}')
+        emit('al_error', {'message': str(e)})
 
 
 @socketio.on('stream_chat')
@@ -556,9 +772,11 @@ def handle_stream_chat(data):
         # 1. PERSISTENT MODE ROUTING
         if ACTIVE_MODE == "network":
              AGENT_CONTEXT["last_agent"] = "netjune"
+             ctf_mode = bool(data.get('ctf_mode', False))
              
              # run_network_agent is now a generator
-             gen = run_network_agent(user_message, model="jimscard/whiterabbit-neo:13b")
+             gen = run_network_agent(user_message, model="jimscard/whiterabbit-neo:13b",
+                                     ctf_mode=ctf_mode)
              full_response = ""
              
              for item in gen:
@@ -630,10 +848,9 @@ def handle_stream_chat(data):
                 emit('stream_complete', {'response': full_response, 'timestamp': datetime.now().isoformat()})
                 return
             else:
+                # BUG #6 FIX: Removed dead pass/fallthrough for network_question.
+                # The unified intent handler below (line 641) already handles it correctly.
                 AGENT_CONTEXT["last_agent"] = "june"
-                # Use standard Assistant but stream it?
-                # For network questions, we can use the main assistant if it knows about network tools (via RAG or system prompt)
-                pass # Use fallback below
 
         # --- SYSTEM / CHAT (Unified SocketIO Handler) ---
         # Covers both explicit 'system' intent AND 'chat' intent fallback

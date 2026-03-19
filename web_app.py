@@ -2,6 +2,7 @@
 from Learning.intent_classifier import classify_intent
 from Learning.agent_context import AGENT_CONTEXT
 from network_ai import run_network_agent
+from AI.moe_orchestrator import dispatch_to_experts
 from flask import Flask, render_template, request, jsonify, Response, stream_with_context
 from flask_socketio import SocketIO, emit
 import requests
@@ -380,6 +381,61 @@ def get_models():
     except:
         return jsonify({'models': []})
 
+@app.route('/api/openrouter/models')
+def get_openrouter_free_models():
+    """Fetches and filters free models from OpenRouter."""
+    try:
+        url = "https://openrouter.ai/api/v1/models"
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        
+        free_models = []
+        for m in data.get('data', []):
+            pricing = m.get('pricing')
+            if not pricing or not isinstance(pricing, dict):
+                continue
+            try:
+                # Ensure we handle both string and float values
+                prompt_price = float(pricing.get('prompt', 0))
+                completion_price = float(pricing.get('completion', 0))
+                if prompt_price == 0 and completion_price == 0:
+                    free_models.append({
+                        'id': m.get('id'),
+                        'name': m.get('name'),
+                        'description': m.get('description', '')
+                    })
+            except (ValueError, TypeError):
+                continue
+                
+        return jsonify({'models': free_models})
+    except Exception as e:
+        print(f"Error fetching OpenRouter models: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/moe/analyze', methods=['POST'])
+def moe_analyze():
+    """Trigger the Mixture of Experts parallel analysis."""
+    try:
+        data = request.json or {}
+        message = data.get('message', '').strip()
+        context = data.get('context', [])
+        
+        if not message:
+            return jsonify({'error': 'No message provided'}), 400
+            
+        # Dispatch to experts
+        result = dispatch_to_experts(message, context_messages=context)
+        
+        return jsonify({
+            'success': True,
+            'domain': result['domain'],
+            'experts': result['experts'],
+            'timestamp': datetime.now().isoformat()
+        })
+    except Exception as e:
+        print(f"Error in MoE analyze: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/conversation', methods=['GET', 'POST', 'DELETE'])
 def conversation():

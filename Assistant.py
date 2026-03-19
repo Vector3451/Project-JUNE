@@ -582,15 +582,27 @@ def execute_tool(name, args):
         outdir = "C:/Users/ADMIN/Desktop/Games/Wall papers & Images"
         os.makedirs(outdir, exist_ok=True)
         output_file = os.path.join(outdir, f"image_{int(time.time())}.png")
+        
+        # Use StabilityMatrix venv python
+        sm_python = r"D:\Programs\StabilityMatrix-win-x64\Data\Packages\reforge\venv\Scripts\python.exe"
+        script_path = r"D:\College\AI Assistant\AI\call_sd.py"
+
+        
         try:
             result = subprocess.run(
                 [
-                    "python", "D:/College/AI Assistant/stable-diffusion-webui/modules/call_sd.py",
+                    sm_python, script_path,
                     "--prompt", prompt,
-                    "--output", output_file
+                    "--output", output_file,
+                    "--width", "1024",
+                    "--height", "1024"
                 ],
                 capture_output=True, text=True
             )
+            
+            if not os.path.exists(output_file):
+                return f"Failed to generate image: {result.stderr}"
+
             if platform.system() == "Windows":
                 os.startfile(output_file)
             elif platform.system() == "Darwin":
@@ -598,8 +610,9 @@ def execute_tool(name, args):
             else:
                 subprocess.Popen(["xdg-open", output_file])
             return f"Here, I drew what you asked!"
-        except Exception:
-            return f"Failed to generate image!"
+        except Exception as e:
+            return f"Failed to generate image: {e}"
+
 
     if name == "run_code_model":
         prompt = args.get("prompt", "")

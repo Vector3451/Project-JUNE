@@ -15,6 +15,8 @@
     <script src="https://cdn.jsdelivr.net/npm/prismjs/components/prism-bash.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/prismjs/components/prism-python.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/prismjs/components/prism-javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <style>
         /* ─── THEME ──────────────────────────────────────────────── */
         :root {
@@ -75,17 +77,76 @@
             inset: 0;
             z-index: 0;
             background: #060608;
-            perspective: 800px;
+            perspective: 1200px;
         }
 
         #june-track-layer {
             width: 100%;
             height: 100%;
             transform-style: preserve-3d;
-            transition: transform 0.1s ease-out;
+            transition: transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
             will-change: transform;
-            transform: scale(1.05);
+            transform: scale(1.05) translateX(var(--cam-x, 0px));
             /* base scale to avoid edge clipping on rotation */
+        }
+
+        #june-puppet {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            transform-style: preserve-3d;
+            transform: rotateX(var(--px, 0deg)) rotateY(var(--py, 0deg));
+            transition: transform 0.1s ease-out, opacity 0.55s ease;
+            will-change: transform;
+        }
+
+        #june-puppet.paused {
+            transition: transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+            transform: rotateX(0deg) rotateY(0deg) !important;
+        }
+
+        #june-body,
+        #june-arm {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center top;
+            display: block;
+            will-change: transform;
+            backface-visibility: hidden;
+        }
+
+        #june-body {
+            transform: translateZ(-20px);
+            transition: transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+            z-index: 1;
+        }
+
+        #june-arm {
+            transform-origin: 30% 60%;
+            transform: translateZ(20px) rotateZ(0deg);
+            transition: transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+            z-index: 5;
+            pointer-events: none;
+        }
+
+        #june-puppet.fallback-mode #june-body {
+            transform: translateZ(0);
+        }
+
+        body.wb-active #june-arm {
+            transform: translateZ(60px) rotateZ(20deg) scale(1.1);
+        }
+
+        body.al-active #june-track-layer {
+            --cam-x: -12%;
+        }
+
+        body.al-active #june-arm {
+            transform: translateZ(60px) rotateZ(-20deg) scale(1.1);
         }
 
         #june-img {
@@ -95,10 +156,12 @@
             object-position: center top;
             display: block;
             transition: opacity .55s ease;
+            transform: rotateX(var(--px, 0deg)) rotateY(var(--py, 0deg));
         }
 
+        #june-puppet.state-idle,
         #june-img.state-idle {
-            animation: breathe 4.5s ease-in-out infinite;
+            animation: breathe 3.0s ease-in-out infinite;
         }
 
         @keyframes breathe {
@@ -113,6 +176,7 @@
             }
         }
 
+        #june-puppet.state-working,
         #june-img.state-working {
             animation: flicker .09s steps(1) infinite;
         }
@@ -289,38 +353,6 @@
             transform: translateY(-7px) rotate(-45deg);
         }
 
-        /* ─── TOP-RIGHT HUD BUTTON ───────────────────────────────── */
-        #hud-tr {
-            position: fixed;
-            top: 12px;
-            right: 14px;
-            z-index: 10;
-            display: flex;
-            gap: 8px;
-        }
-
-        .hud-btn {
-            height: 30px;
-            padding: 0 12px;
-            border-radius: 8px;
-            border: 1px solid var(--glass-b);
-            background: var(--glass);
-            backdrop-filter: blur(14px);
-            color: var(--muted);
-            font-family: var(--hud);
-            font-size: 11px;
-            letter-spacing: .1em;
-            text-transform: uppercase;
-            cursor: pointer;
-            transition: border-color .2s, color .2s, box-shadow .2s;
-        }
-
-        .hud-btn:hover,
-        .hud-btn.active {
-            border-color: var(--glass-bh);
-            color: var(--accent);
-            box-shadow: 0 0 10px var(--accent-glow);
-        }
 
         /* ─── DRAWER BACKDROP ────────────────────────────────────── */
         #drawer-bd {
@@ -1933,6 +1965,81 @@
             color: var(--muted);
             background: transparent;
         }
+
+        /* MoE Responses */
+        .moe-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 8px;
+            padding: 5px 10px;
+            background: rgba(77, 217, 255, 0.1);
+            border: 1px solid rgba(77, 217, 255, 0.3);
+            border-radius: 6px;
+            color: var(--accent);
+            font-family: var(--hud);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .moe-btn:hover:not(:disabled) {
+            background: rgba(77, 217, 255, 0.2);
+            border-color: var(--accent);
+            box-shadow: 0 0 10px var(--accent-glow);
+        }
+
+        .moe-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .moe-responses-container {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 5px;
+        }
+
+        .moe-domain {
+            font-family: var(--hud);
+            font-size: 11px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: .1em;
+            border-bottom: 1px solid var(--glass-b);
+            padding-bottom: 6px;
+        }
+
+        .moe-expert-block {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--glass-b);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .moe-expert-name {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 6px 10px;
+            font-family: var(--mono);
+            font-size: 11px;
+            color: var(--accent);
+            border-bottom: 1px solid var(--glass-b);
+        }
+
+        .moe-expert-content {
+            padding: 10px;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .moe-expert-content.error {
+            color: #ff4455;
+            font-family: var(--mono);
+            font-size: 11px;
+        }
     </style>
 </head>
 
@@ -1940,14 +2047,8 @@
 
     <!-- ── JUNE BACKGROUND ─────────────────────────────── -->
     <div id="june-bg">
-        <div id="june-track-layer">
-            <!-- Static image for idle/hacker states -->
-            <img id="june-img" src="/static/june_idle.png" alt="JUNE" class="state-idle"
-                onerror="this.style.opacity='0'">
-            <!-- Video for working/netWorking state (looping, muted, autoplay) -->
-            <video id="june-vid" src="/static/june_working.mp4" loop muted playsinline preload="auto" style="width:100%;height:100%;object-fit:cover;object-position:center top;
-                          display:none;position:absolute;inset:0;"></video>
-        </div>
+        <canvas id="june-canvas"
+            style="position: absolute; inset: 0; width: 100vw; height: 100vh; display: block;"></canvas>
     </div>
 
     <!-- ── OVERLAYS ────────────────────────────────────── -->
@@ -1976,10 +2077,6 @@
         <div class="hline"></div>
     </div>
 
-    <!-- ── TOP-RIGHT ───────────────────────────────────── -->
-    <div id="hud-tr">
-        <button class="hud-btn active" id="log-btn" onclick="toggleLog()">Chat Log</button>
-    </div>
 
     <!-- ── DRAWER BACKDROP ─────────────────────────────── -->
     <div id="drawer-bd" onclick="closeDrawer()"></div>
@@ -2249,16 +2346,7 @@
                     <label>Planner Model <span style="color:var(--muted);font-size:9px">(heavy reasoning)</span></label>
                     <select id="al-planner-model" class="al-select">
                         <optgroup label="── Cloud Models (OpenRouter) ──">
-                            <option value="openrouter:anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet</option>
-                            <option value="openrouter:anthropic/claude-3.5-haiku">Claude 3.5 Haiku</option>
-                            <option value="openrouter:openai/gpt-4o">GPT-4o</option>
-                            <option value="openrouter:openai/gpt-4o-mini">GPT-4o Mini</option>
-                            <option value="openrouter:openai/o1-mini">o1-mini</option>
-                            <option value="openrouter:google/gemini-pro-1.5">Gemini 1.5 Pro</option>
-                            <option value="openrouter:google/gemini-flash-1.5">Gemini 1.5 Flash</option>
-                            <option value="openrouter:meta-llama/llama-3.1-405b">Llama 3.1 405B</option>
-                            <option value="openrouter:meta-llama/llama-3.1-70b-instruct">Llama 3.1 70B</option>
-                            <option value="openrouter:mistralai/mistral-large">Mistral Large 2</option>
+                            <option value="">Fetching free models...</option>
                         </optgroup>
                         <optgroup label="── Local Models (Ollama) ──" id="al-planner-local">
                             <option value="local:june:latest">June (Local)</option>
@@ -2274,10 +2362,7 @@
                             <option value="local:june:latest">June (Local)</option>
                         </optgroup>
                         <optgroup label="── Cloud Models (OpenRouter) ──">
-                            <option value="openrouter:anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet</option>
-                            <option value="openrouter:openai/gpt-4o-mini">GPT-4o Mini</option>
-                            <option value="openrouter:google/gemini-flash-1.5">Gemini 1.5 Flash</option>
-                            <option value="openrouter:meta-llama/llama-3.1-70b-instruct">Llama 3.1 70B</option>
+                            <option value="">Fetching free models...</option>
                         </optgroup>
                     </select>
                 </div>
@@ -2423,38 +2508,16 @@
         let juneState = 'idle';
         let isNet = false;
 
-        function setJune(state) {
-            if (juneState === state) return;
+        function setJune(state, force = false) {
+            if (juneState === state && !force) return;
             juneState = state;
-            const img = document.getElementById('june-img');
-            const vid = document.getElementById('june-vid');
-            const stxt = document.getElementById('s-txt');
 
-            if (state === 'working' || state === 'netWorking') {
-                // Switch to video
-                img.style.opacity = '0';
-                vid.src = VIDS[state];
-                setTimeout(() => {
-                    img.style.display = 'none';
-                    vid.style.display = 'block';
-                    vid.play().catch(() => { });
-                    vid.style.opacity = '1';
-                }, 300);
-            } else {
-                // Switch to image (stop video if playing)
-                vid.pause();
-                vid.style.opacity = '0';
-                vid.style.display = 'none';
-                img.style.display = 'block';
-                img.style.opacity = '0';
-                setTimeout(() => {
-                    img.className = 'state-idle';
-                    img.src = IMGS[state] || IMGS.idle;
-                    img.style.opacity = '';
-                }, 300);
+            if (window.june3D) {
+                window.june3D.setState(state);
             }
 
-            stxt.textContent = STATUS[state] || 'IDLE';
+            const stxt = document.getElementById('s-txt');
+            if (stxt) stxt.textContent = STATUS[state] || 'IDLE';
             document.body.classList.toggle('hacker-mode', state === 'hacker' || state === 'netWorking');
         }
 
@@ -2467,7 +2530,6 @@
         let curAid = null;
         let streamBuf = '';
         let voiceOn = false;
-        let logVisible = true;
         let curModel = 'june:latest';
         let mediaRec = null;
         let recChunks = [];
@@ -2487,15 +2549,42 @@
             if (!curAid) return;
             const msgEl = document.querySelector(`.msg.assistant[data-id="${curAid}"]`);
             if (msgEl) {
+                const text = d.response || streamBuf || '';
                 const bub = msgEl.querySelector('.bub');
-                bub.innerHTML = marked.parse(d.response || streamBuf || '');
-                saveMsgConv('assistant', d.response || streamBuf || '');
+                bub.innerHTML = marked.parse(text);
+                saveMsgConv('assistant', text);
                 if (window.Prism) Prism.highlightAllUnder(msgEl);
                 addCopyBtns(msgEl);
+
+                // Check for media to display on 3D Hologram
+                if (window.june3D) {
+                    const imgMatch = text.match(/!\[.*?\]\((.*?)\)/);
+                    if (imgMatch && imgMatch[1]) {
+                        const url = imgMatch[1];
+                        const isVideo = url.toLowerCase().endsWith('.mp4') || url.toLowerCase().endsWith('.webm');
+                        window.june3D.showHologramItem(url, isVideo);
+                    } else {
+                        const htmlImgMatch = text.match(/<img.*?src="(.*?)".*?>/);
+                        if (htmlImgMatch && htmlImgMatch[1]) {
+                            window.june3D.showHologramItem(htmlImgMatch[1], false);
+                        } else {
+                            const htmlVidMatch = text.match(/<video.*?src="(.*?)".*?>/);
+                            if (htmlVidMatch && htmlVidMatch[1]) {
+                                window.june3D.showHologramItem(htmlVidMatch[1], true);
+                            }
+                        }
+                    }
+                }
             }
             streamBuf = ''; curAid = null;
             if (voiceOn && d.response) speak(d.response);
-            setJune(isNet ? 'hacker' : 'idle');
+
+            // Re-check curModel in case it was updated by mode_change event during the stream
+            if (curModel === 'june-net' || isNet) {
+                setJune('hacker');
+            } else {
+                setJune('idle');
+            }
         });
 
         socket.on('stream_new_bubble', () => {
@@ -2667,10 +2756,16 @@
                 panel.classList.add('active');
                 if (btn) btn.classList.add('active');
                 if (menuBtn) menuBtn.style.display = 'none'; // hide hamburger
+
+                document.body.classList.add('wb-active');
+                if (window.june3D) window.june3D.setFocus('workbench');
             } else {
                 panel.classList.remove('active');
                 if (btn) btn.classList.remove('active');
                 if (menuBtn) menuBtn.style.display = 'flex'; // show hamburger
+
+                document.body.classList.remove('wb-active');
+                if (window.june3D) window.june3D.setFocus('none');
             }
         }
 
@@ -2889,23 +2984,10 @@
            AVATAR MOUSE TRACKING
         ============================================================ */
         document.addEventListener('mousemove', (e) => {
-            const trackLayer = document.getElementById('june-track-layer');
-            if (!trackLayer) return;
-
-            // Calculate mouse position relative to center of screen [-1 to 1]
-            const x = (e.clientX / window.innerWidth) * 2 - 1;
-            const y = (e.clientY / window.innerHeight) * 2 - 1;
-
-            // Limit rotation angles for a subtle 3D head turning effect
-            const rotX = -y * 3.5; // Negative so mouse up tilts head up
-            const rotY = x * 6;    // Positive so mouse right turns head right
-
-            // Slight translation for parallax effect
-            const tX = -x * 8;
-            const tY = -y * 8;
-
-            // Scale prevents edge clipping when element rotates
-            trackLayer.style.transform = `scale(1.05) rotateX(${rotX}deg) rotateY(${rotY}deg) translate(${tX}px, ${tY}px)`;
+            if (document.body.classList.contains('wb-active') || document.body.classList.contains('al-active')) return;
+            if (window.june3D) {
+                window.june3D.handleMouseMove(e);
+            }
         });
 
         /* ============================================================
@@ -2970,6 +3052,13 @@
             });
         }
 
+        // Ensure the puppet renders immediately
+        document.addEventListener("DOMContentLoaded", () => {
+            // Force a cache reload just in case
+            window.juneFallback = false;
+            setJune('idle', true);
+        });
+
         /* ============================================================
            MESSAGES
         ============================================================ */
@@ -2977,12 +3066,107 @@
             const log = document.getElementById('chat-log');
             const w = document.createElement('div');
             w.className = 'msg ' + sender;
-            w.dataset.id = id || ('msg_' + mc++);
-            w.innerHTML = `<div class="bub">${marked.parse(text || '')}</div>`;
+            const actualId = id || ('msg_' + mc++);
+            w.dataset.id = actualId;
+
+            let extra = '';
+            if (sender === 'user' && !document.getElementById(actualId)) {
+                try {
+                    const safeText = btoa(unescape(encodeURIComponent(text || '')));
+                    extra = `<div style="margin-top: 8px; text-align: right;"><button class="moe-btn" onclick="triggerMoE('${actualId}', '${safeText}')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px; margin-top: -2px;"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>Analyze with Expert</button></div>`;
+                } catch (e) {
+                    // fallback if encoding fails
+                }
+            }
+
+            w.innerHTML = `<div class="bub">${marked.parse(text || '')}${extra}</div>`;
             log.appendChild(w);
             if (window.Prism) Prism.highlightAllUnder(w);
             addCopyBtns(w);
             scrollB();
+        }
+
+        async function triggerMoE(msgId, encodedText) {
+            const btn = document.querySelector(`.msg[data-id="${msgId}"] .moe-btn`);
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="dots"><span></span><span></span><span></span></span> Analyzing...';
+            }
+
+            let text = '';
+            try { text = decodeURIComponent(escape(atob(encodedText))); } catch (e) { text = 'Unknown'; }
+
+            const context = [];
+            const c = getConv();
+            if (c) {
+                const idx = c.messages.findIndex(m => m.id === msgId);
+                if (idx > 0) {
+                    const startIdx = Math.max(0, idx - 4);
+                    context.push(...c.messages.slice(startIdx, idx).map(m => ({
+                        role: m.sender === 'assistant' ? 'assistant' : 'user',
+                        content: m.text
+                    })));
+                }
+            }
+
+            try {
+                const res = await fetch('/api/moe/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: text, context: context })
+                });
+                const data = await res.json();
+
+                if (data.error) {
+                    addMsg('assistant', `[MoE Error] ${data.error}`);
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px; margin-top: -2px;"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>Retry Analysis`;
+                    }
+                    return;
+                }
+
+                let html = `<div class="moe-responses-container">`;
+                html += `<div class="moe-domain">Domain classified: <strong>${data.domain}</strong></div>`;
+
+                data.experts.forEach(exp => {
+                    html += `<div class="moe-expert-block">`;
+                    html += `<div class="moe-expert-name">⚙️ Expert: ${exp.model}</div>`;
+                    if (exp.error) {
+                        html += `<div class="moe-expert-content error">${exp.error}</div>`;
+                    } else {
+                        html += `<div class="moe-expert-content">${marked.parse(exp.content)}</div>`;
+                    }
+                    html += `</div>`;
+                });
+                html += `</div>`;
+
+                const newId = 'msg_' + mc++;
+                const log = document.getElementById('chat-log');
+                const w = document.createElement('div');
+                w.className = 'msg assistant';
+                w.dataset.id = newId;
+                w.innerHTML = `<div class="bub">${html}</div>`;
+                log.appendChild(w);
+
+                if (window.Prism) Prism.highlightAllUnder(w);
+                addCopyBtns(w);
+                scrollB();
+
+                saveMsgConv('assistant', `[MoE Analysis Results for: ${text}]\\n...rendered internally...`);
+
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px; margin-top: -2px;"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>Re-analyze`;
+                }
+
+            } catch (err) {
+                addMsg('assistant', `[MoE Error] Network or server error.`);
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px; margin-top: -2px;"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>Retry Analysis`;
+                }
+            }
         }
 
         const SVG_COPY = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
@@ -3023,9 +3207,18 @@
             box.value = ''; box.style.height = 'auto';
             setTyping(true);
 
-            // Bypass netWorking video for exit commands so it doesn't flash before the backend transition
-            const isExitCmd = (text.toLowerCase() === 'exit hacker mode' || text.toLowerCase() === 'exit');
-            setJune(isNet && !isExitCmd ? 'netWorking' : 'working');
+            // Bypass working/netWorking video for mode switches so it doesn't flash the wrong video
+            const textLower = text.toLowerCase();
+            const isExitCmd = (textLower === 'exit hacker mode' || textLower === 'exit');
+            const isEnterCmd = (textLower === 'enter hacker mode');
+
+            if (isEnterCmd) {
+                setJune('netWorking');
+            } else if (isExitCmd) {
+                setJune('working');
+            } else {
+                setJune(isNet ? 'netWorking' : 'working');
+            }
 
             const aid = 'msg_' + mc++;
             addMsg('assistant', '', aid);
@@ -3079,14 +3272,6 @@
             }
         }
 
-        /* ============================================================
-           CHAT LOG TOGGLE
-        ============================================================ */
-        function toggleLog() {
-            logVisible = !logVisible;
-            document.getElementById('chat-log').style.display = logVisible ? 'flex' : 'none';
-            document.getElementById('log-btn').classList.toggle('active', logVisible);
-        }
 
         /* ============================================================
            TTS
@@ -3245,51 +3430,75 @@
         let alCurrentSpec = null;   // { proposal, tasks: [] }
         let alExecuting = false;
 
-        // Populate local model dropdowns from /api/models
+        // Populate local and cloud model dropdowns
         async function populateAlModels() {
+            // 1. Fetch Local Models (Ollama)
             try {
-                const res = await fetch('/api/models');
-                if (!res.ok) throw new Error('API failed');
-                const data = await res.json();
-
-                // Ollama returns objects with .name, but let's be safe
-                const models = (data.models || []).map(m => {
+                const localRes = await fetch('/api/models');
+                const localData = await localRes.json();
+                const localModels = (localData.models || []).map(m => {
                     if (typeof m === 'string') return m;
                     return m.name || m.model || '';
                 }).filter(name => name !== '');
 
-                const plannerGroup = document.getElementById('al-planner-local');
-                const coderGroup = document.getElementById('al-coder-local');
-                if (!plannerGroup || !coderGroup) return;
+                const plannerLocal = document.getElementById('al-planner-local');
+                const coderLocal = document.getElementById('al-coder-local');
 
-                if (models.length > 0) {
-                    plannerGroup.innerHTML = '';
-                    coderGroup.innerHTML = '';
-
-                    models.forEach(name => {
-                        const opt1 = document.createElement('option');
-                        opt1.value = 'local:' + name;
-                        opt1.textContent = name + ' (Local)';
-                        plannerGroup.appendChild(opt1);
-
-                        const opt2 = opt1.cloneNode(true);
-                        coderGroup.appendChild(opt2);
+                if (plannerLocal && coderLocal && localModels.length > 0) {
+                    plannerLocal.innerHTML = '';
+                    coderLocal.innerHTML = '';
+                    localModels.forEach(name => {
+                        const opt = document.createElement('option');
+                        opt.value = 'local:' + name;
+                        opt.textContent = name + ' (Local)';
+                        plannerLocal.appendChild(opt);
+                        coderLocal.appendChild(opt.cloneNode(true));
                     });
                 }
 
-                // Default coder selection if none picked
+                // Set default coder selection
                 const coderSelect = document.getElementById('al-coder-model');
-                if (coderSelect && (coderSelect.value.startsWith('local:june') || !coderSelect.value)) {
-                    const coderPref = models.find(m =>
-                        m.toLowerCase().includes('code') ||
-                        m.toLowerCase().includes('qwen') ||
-                        m.toLowerCase().includes('deepseek')
+                if (coderSelect && (!coderSelect.value || coderSelect.value.includes('june'))) {
+                    const coderPref = localModels.find(m =>
+                        m.toLowerCase().includes('code') || m.toLowerCase().includes('qwen')
                     );
                     if (coderPref) coderSelect.value = 'local:' + coderPref;
                 }
-
             } catch (e) {
                 console.warn('Agent Lab: failed to load local models', e);
+            }
+
+            // 2. Fetch Free Cloud Models (OpenRouter)
+            try {
+                const cloudRes = await fetch('/api/openrouter/models');
+                const cloudData = await cloudRes.json();
+                const cloudModels = cloudData.models || [];
+                const cloudGroups = document.querySelectorAll('optgroup[label*="OpenRouter"]');
+
+                cloudGroups.forEach(group => {
+                    group.innerHTML = ''; // Clear "Fetching..." placeholder
+                    if (cloudModels.length > 0) {
+                        cloudModels.forEach(m => {
+                            const opt = document.createElement('option');
+                            opt.value = 'openrouter:' + m.id;
+                            opt.textContent = m.name;
+                            opt.title = m.description;
+                            group.appendChild(opt);
+                        });
+                    } else {
+                        const opt = document.createElement('option');
+                        opt.value = "";
+                        opt.disabled = true;
+                        opt.textContent = cloudData.error ? "Error: " + cloudData.error : "No free models available";
+                        group.appendChild(opt);
+                    }
+                });
+            } catch (e) {
+                console.warn('Agent Lab: failed to load cloud models', e);
+                const cloudGroups = document.querySelectorAll('optgroup[label*="OpenRouter"]');
+                cloudGroups.forEach(group => {
+                    group.innerHTML = '<option disabled>Offline (Check Server)</option>';
+                });
             }
         }
 
@@ -3303,8 +3512,14 @@
             if (agentLabOpen) {
                 panel.classList.add('active');
                 populateAlModels();
+
+                document.body.classList.add('al-active');
+                if (window.june3D) window.june3D.setFocus('agentlab');
             } else {
                 panel.classList.remove('active');
+
+                document.body.classList.remove('al-active');
+                if (window.june3D) window.june3D.setFocus('none');
             }
         }
 
@@ -3461,6 +3676,195 @@
             logEl.innerHTML = ''; logEl.classList.remove('active');
             setAlPhase('idle');
         }
+
+        /* ============================================================
+           THREE.JS MANAGER
+        ============================================================ */
+        class June3DManager {
+            constructor() {
+                this.canvas = document.getElementById('june-canvas');
+                if (!this.canvas) return;
+
+                this.scene = new THREE.Scene();
+                // Extremely tight FOV (10) to bring the portrait right into frame
+                this.camera = new THREE.PerspectiveCamera(10, window.innerWidth / window.innerHeight, 0.1, 100);
+                this.defaultCamZ = 6.0;  // Standard portrait distance
+                this.camera.position.set(0, 0, this.defaultCamZ);
+
+                this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, alpha: true, antialias: true });
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.setPixelRatio(window.devicePixelRatio);
+
+                this.model = null;
+                this.hologram = null;
+
+                this.targetCamPos = new THREE.Vector3(0, 0, this.defaultCamZ);
+                this.targetModelRot = new THREE.Euler(0, -1.57, 0); // Face the camera (-90 degrees offset)
+                this.currentModelRot = new THREE.Euler(0, -1.57, 0);
+
+                this.mouse = { x: 0, y: 0 };
+
+                this.lights = {};
+                this.setupLighting();
+                this.loadModel();
+
+                window.addEventListener('resize', this.onWindowResize.bind(this));
+                this.animate();
+            }
+
+            setupLighting() {
+                const ambient = new THREE.AmbientLight(0xffffff, 1.0);
+                this.scene.add(ambient);
+
+                this.lights.main = new THREE.DirectionalLight(0xffffff, 0.8);
+                this.lights.main.position.set(2, 5, 5);
+                this.scene.add(this.lights.main);
+
+                this.lights.cyan = new THREE.PointLight(0x4dd9ff, 1, 20);
+                this.lights.cyan.position.set(-3, 1, 2);
+                this.scene.add(this.lights.cyan);
+
+                this.lights.magenta = new THREE.PointLight(0xff39a3, 0.8, 20);
+                this.lights.magenta.position.set(3, -1, 2);
+                this.scene.add(this.lights.magenta);
+
+                this.lights.green = new THREE.PointLight(0x39ff7e, 0, 20);
+                this.lights.green.position.set(0, -2, 3);
+                this.scene.add(this.lights.green);
+            }
+
+            loadModel() {
+                const loader = new THREE.GLTFLoader();
+                loader.load('/static/JUNE.glb', (gltf) => {
+                    this.model = gltf.scene;
+                    // Lowered slightly per user request
+                    this.model.position.y = -0.25;
+                    this.scene.add(this.model);
+                }, undefined, (error) => {
+                    console.error('An error happened loading JUNE.glb:', error);
+                    // Output error to screen for debugging if textures are missing
+                    const errEl = document.createElement('div');
+                    errEl.style.cssText = 'position:fixed;top:50px;left:50%;transform:translateX(-50%);background:red;color:white;padding:10px;z-index:9999;border-radius:5px;font-family:monospace;';
+                    errEl.innerText = 'GLTF Load Error: ' + error.message;
+                    document.body.appendChild(errEl);
+                });
+            }
+
+            setState(state) {
+                if (state === 'hacker' || state === 'netWorking') {
+                    this.lights.cyan.intensity = 0.2;
+                    this.lights.magenta.intensity = 0.2;
+                    this.lights.green.intensity = 2.0;
+                } else {
+                    this.lights.cyan.intensity = 1.0;
+                    this.lights.magenta.intensity = 0.8;
+                    this.lights.green.intensity = 0;
+                }
+            }
+
+            setFocus(type) {
+                if (type === 'workbench') {
+                    // Shift camera left to push model right (for full workbench overlay flow)
+                    this.targetCamPos.set(-0.4, -0.2, 4.5);
+                } else if (type === 'agentlab') {
+                    // Shift camera RIGHT to push model LEFT, making room for the Agent Lab panel on the right side
+                    this.targetCamPos.set(0.35, -0.2, 4.8);
+                } else {
+                    this.targetCamPos.set(0, 0, this.defaultCamZ);
+                }
+            }
+
+            handleMouseMove(e) {
+                this.mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+                this.mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+                // Base rotation (-1.57) so center screen looks forward (-90 deg offset)
+                this.targetModelRot.y = -1.57 + (this.mouse.x * 0.4);
+                this.targetModelRot.x = -(this.mouse.y * 0.2);
+            }
+
+            onWindowResize() {
+                if (!this.camera || !this.renderer) return;
+                this.camera.aspect = window.innerWidth / window.innerHeight;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+
+            animate() {
+                requestAnimationFrame(this.animate.bind(this));
+
+                if (this.camera) {
+                    this.camera.position.lerp(this.targetCamPos, 0.05);
+                }
+
+                if (this.model) {
+                    if (document.body.classList.contains('al-active')) {
+                        // Model is on LEFT, look RIGHT at Agent Lab panel
+                        this.currentModelRot.y += (-1.2 - this.currentModelRot.y) * 0.05;
+                        this.currentModelRot.x += (0.05 - this.currentModelRot.x) * 0.05;
+                    } else if (document.body.classList.contains('wb-active')) {
+                        // Model is on RIGHT, look LEFT at Workbench UI
+                        this.currentModelRot.y += (-2.0 - this.currentModelRot.y) * 0.05;
+                        this.currentModelRot.x += (0.05 - this.currentModelRot.x) * 0.05;
+                    } else {
+                        this.currentModelRot.y += (this.targetModelRot.y - this.currentModelRot.y) * 0.05;
+                        this.currentModelRot.x += (this.targetModelRot.x - this.currentModelRot.x) * 0.05;
+                    }
+                    this.model.rotation.set(this.currentModelRot.x, this.currentModelRot.y, 0);
+
+                    const time = Date.now() * 0.001;
+                    // Significantly reduced the sine amplitude for a much subtler breathing effect
+                    this.model.position.y = -0.25 + Math.sin(time) * 0.012;
+                }
+
+                if (this.hologram) {
+                    const time = Date.now() * 0.002;
+                    this.hologram.position.y += Math.sin(time) * 0.001;
+                    this.hologram.quaternion.copy(this.camera.quaternion);
+                }
+
+                this.renderer.render(this.scene, this.camera);
+            }
+
+            showHologramItem(url, isVideo = false) {
+                if (this.hologram) {
+                    this.scene.remove(this.hologram);
+                    this.hologram = null;
+                }
+
+                const geometry = new THREE.PlaneGeometry(2, 2);
+                let material;
+
+                if (isVideo) {
+                    const video = document.createElement('video');
+                    video.src = url;
+                    video.crossOrigin = 'anonymous';
+                    video.loop = true;
+                    video.muted = true;
+                    video.play();
+                    const texture = new THREE.VideoTexture(video);
+                    material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide, transparent: true, opacity: 0.95 });
+                } else {
+                    const texture = new THREE.TextureLoader().load(url);
+                    material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide, transparent: true, opacity: 0.95 });
+                }
+
+                this.hologram = new THREE.Mesh(geometry, material);
+                this.hologram.position.set(1.5, 0, 3);
+                this.scene.add(this.hologram);
+
+                setTimeout(() => {
+                    if (this.hologram) {
+                        this.scene.remove(this.hologram);
+                        this.hologram = null;
+                    }
+                }, 15000);
+            }
+        }
+
+        window.addEventListener('load', () => {
+            window.june3D = new June3DManager();
+        });
     </script>
 </body>
 

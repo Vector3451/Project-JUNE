@@ -795,6 +795,17 @@ def execute_tool(name, args):
         if not url: return "No URL provided."
         return learn_from_url(url)
 
+    if name == "mcp_call":
+        server = args.pop("mcp_server", None)
+        tool_name = args.pop("mcp_tool", None)
+        if not server or not tool_name:
+            return "MCP Call failed: mcp_server and mcp_tool are required."
+        try:
+            from Network.mcp_gateway import run_mcp_tool_sync
+            return run_mcp_tool_sync(server, tool_name, args)
+        except Exception as e:
+            return f"MCP Error: {e}"
+
     if name == "execute_network_tool":
         try:
             return network_gateway(args)
@@ -871,11 +882,27 @@ conversation_history = [
             11. install_tool
             12. learn_from_url
             13. display_on_pi
+            14. mcp_call
             
             NOTE:
             • Network scanning tools (Nmap, Hydra, Nikto, etc.) belong to a **separate agent**  
             • June must **never** generate JSON for network operations.  
             • June may answer QUESTIONS about them, but never execute or simulate.
+
+            ================================================================================
+            MCP DOCKER TOOLS
+            ================================================================================
+            You have access to Dockerized MCP servers (e.g., "github", "shodan", "kali-tools").
+            To call them, use the `mcp_call` tool and pass `mcp_server`, `mcp_tool`, and any other args.
+            Example request: "Search GitHub for fastapi using MCP"
+            {
+                "tool": "mcp_call",
+                "args": {
+                    "mcp_server": "github",
+                    "mcp_tool": "search_repositories",
+                    "query": "fastapi"
+                }
+            }
 
             ================================================================================
             GITHUB & ABILITY EXTENSION
@@ -1128,7 +1155,7 @@ def ingest_docs_from_folder():
         if os.path.isfile(file_path) and filename.endswith((".txt", ".md", ".json", ".py", ".html")):
             print(f"[ASSISTANT] Ingesting: {filename}")
             res = rag_add_document(file_path)
-            if "added to knowledge base" in res:
+            if "Successfully learned from" in res or "added to knowledge base" in res:
                 processed.add(filename)
                 new_files_count += 1
             else:

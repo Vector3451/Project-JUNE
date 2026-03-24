@@ -2433,6 +2433,8 @@
             <div id="radial-items-container"></div>
         </div>
 
+        <input type="file" id="file-inp" style="display:none;" accept=".txt,.pdf,.ovpn,.md,.json,.html" />
+
         <!-- Input bar -->
         <div id="input-bar">
             <!-- Workbench feature -->
@@ -2627,9 +2629,6 @@
             renderRadialTools();
         });
 
-        /* ============================================================
-           INIT
-        ============================================================ */
         document.addEventListener('DOMContentLoaded', () => {
             loadConvs();
             if (!curConv) newConv();
@@ -2643,6 +2642,29 @@
             setupDrop();
             setupRadialMenu();
             initWorkbench();
+            
+            // Setup File Uploader
+            const fileInp = document.getElementById('file-inp');
+            if(fileInp) {
+                fileInp.addEventListener('change', async (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    
+                    addMsg('user', "[UPLOADING FILE] " + file.name + "...");
+                    
+                    try {
+                        const res = await fetch('/upload_file', { method: 'POST', body: formData });
+                        const text = await res.text();
+                        addMsg('assistant', "### 📂 File Uploaded\n" + text);
+                    } catch(err) {
+                        addMsg('assistant', "⚠ **Error uploading file:** " + err);
+                    }
+                    e.target.value = ''; // Reset input
+                });
+            }
         });
 
         /* ============================================================

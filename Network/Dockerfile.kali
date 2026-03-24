@@ -1,0 +1,82 @@
+FROM kalilinux/kali-rolling
+
+# ── Base system & essentials ────────────────────────────────────────────────
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    curl wget git vim python3 python3-pip ruby perl \
+    build-essential gcc gdb ltrace strace \
+    iputils-ping dnsutils net-tools netcat-traditional \
+    openssl libssl-dev libffi-dev \
+    file xxd binutils \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Network & Recon ─────────────────────────────────────────────────────────
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    nmap masscan wireshark tshark tcpdump \
+    hydra medusa wifite aircrack-ng \
+    nikto dirb gobuster ffuf \
+    whois dnsrecon theharvester amass \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Web Exploitation ────────────────────────────────────────────────────────
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    sqlmap burpsuite zaproxy \
+    wfuzz whatweb wafw00f \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Password Cracking & Wordlists ───────────────────────────────────────────
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    hashcat john hash-identifier \
+    seclists wordlists \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Forensics & Steganography ───────────────────────────────────────────────
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    binwalk foremost exiftool \
+    steghide stegosuite pngcheck \
+    autopsy \
+    wireshark-common tshark \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Reverse Engineering ─────────────────────────────────────────────────────
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    ghidra radare2 \
+    gdb-peda \
+    upx-ucl \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Binary Exploitation / PWN ───────────────────────────────────────────────
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    patchelf checksec tmux openvpn \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip3 install --break-system-packages \
+    pwntools \
+    ROPgadget \
+    z3-solver \
+    angr \
+    volatility3
+
+# ── Crypto ──────────────────────────────────────────────────────────────────
+RUN pip3 install --break-system-packages \
+    pycryptodome \
+    gmpy2 \
+    sympy
+
+# Clone RsaCtfTool (not in apt)
+RUN git clone --depth 1 https://github.com/RsaCtfTool/RsaCtfTool /opt/RsaCtfTool \
+    && pip3 install --break-system-packages --ignore-installed -r /opt/RsaCtfTool/requirements.txt
+
+# ── OSINT ───────────────────────────────────────────────────────────────────
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    maltego sherlock \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Exploit Development ─────────────────────────────────────────────────────
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    metasploit-framework \
+    exploitdb \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Runtime ─────────────────────────────────────────────────────────────────
+WORKDIR /workspace
+CMD ["/bin/bash"]

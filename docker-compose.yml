@@ -1,0 +1,23 @@
+version: '3.8'
+
+# This file configures the MCP servers for June and NetJune.
+# The `mcp_gateway.py` spawns these containers directly via `docker run`, 
+# but they are documented here for environment variables and build contexts.
+
+services:
+  github-mcp:
+    image: node:20
+    environment:
+      - GITHUB_PERSONAL_ACCESS_TOKEN=${GITHUB_TOKEN}
+    command: npx -y @modelcontextprotocol/server-github
+    
+  kali-mcp:
+    image: durkdiggler/kali-mcp:latest
+    environment:
+      - KALI_MODE=agent-only
+      
+  shodan-mcp:
+    image: python:3.11
+    environment:
+      - SHODAN_API_KEY=${SHODAN_API_KEY}
+    command: sh -c "pip install mcp-server-shodan && python -m mcp_server_shodan"

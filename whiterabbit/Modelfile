@@ -1,0 +1,3 @@
+FROM jimscard/whiterabbit-neo:13b
+PARAMETER num_gpu 35
+PARAMETER num_ctx 4096

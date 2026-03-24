@@ -12,6 +12,7 @@ from datetime import datetime
 import os
 import tempfile
 import re
+from werkzeug.utils import secure_filename
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -43,6 +44,28 @@ ACTIVE_MODE = "standard" # "standard" | "network"
 def index():
     """Main chat interface"""
     return render_template('chat.html')
+
+@app.route('/upload_file', methods=['POST'])
+def upload_vpn_file_route():
+    """Handles uploading of VPN files and general documents"""
+    if 'file' not in request.files:
+        return "No file provided", 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return "Empty filename", 400
+    
+    filename = secure_filename(file.filename)
+    
+    # Sort the file based on its extension
+    if filename.endswith('.ovpn'):
+        save_path = os.path.join(r"D:\College\AI Assistant\vpns", filename)
+        file.save(save_path)
+        return f"VPN file '{filename}' successfully loaded into the Kali container.\nYou can now connect to it via NetJune using: `openvpn --config /vpns/{filename} --daemon`"
+    else:
+        save_path = os.path.join(r"D:\College\AI Assistant\documents", filename)
+        file.save(save_path)
+        return f"Document '{filename}' added to the internal knowledge base.\nIt will be ingested automatically."
 
 def extract_tool_call(text: str):
     """
@@ -193,7 +216,6 @@ def chat():
             AGENT_CONTEXT["last_agent"] = "june"
 
             reply = ask_ollama_chat(user_message, model)
-            # BUG #4 FIX: None return (e.g. empty model output) was cast to "None" string.
             if not reply or not isinstance(reply, str):
                 reply = "[No response generated. Please try again.]"
 
@@ -848,6 +870,7 @@ def handle_stream_chat(data):
                      # String chunk
                      full_response += item
                      emit('stream_chunk', {'chunk': item})
+                     socketio.sleep(0.01) # Force flush the buffer to frontend
                      
              emit('stream_complete', {'response': full_response, 'timestamp': datetime.now().isoformat()})
              return
@@ -899,8 +922,9 @@ def handle_stream_chat(data):
                         # String chunk
                         full_response += item
                         emit('stream_chunk', {'chunk': item})
-                        
-                # Ensure the final bubble is closed properly
+                        socketio.sleep(0.01) # Keep websocket alive and flush
+                         
+                 # Ensure the final bubble is closed properly
                 emit('stream_complete', {'response': full_response, 'timestamp': datetime.now().isoformat()})
                 return
             else:

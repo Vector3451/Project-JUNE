@@ -103,66 +103,120 @@ def decide_context_source(query, rag_context):
     if any(k in query_lower for k in time_sensitive_keywords):
         return True, "Time-sensitive keyword detected."
 
-    # Fallback if RAG is empty
-    if not rag_context:
-        return True, "No local RAG context found."
-
     return False, "RAG context is sufficient."
 
 # Persistent conversation memory ONLY for the network agent
 network_history = []
 
 NETWORK_SYSTEM_PROMPT = """
-You are "NetJune", an elite Network Operations AI and a Red-Team specialist.
-Your Goal: Execute network commands for the user. 
-Persona: Professional, technical, direct.
-CRITICAL: Always refer to yourself as "I". Never speak in the third person (e.g., do NOT say "NetJune thinks...").
+===============================================================================
+IDENTITY
+===============================================================================
+You are NetJune — an elite Network Operations AI and Red Team specialist.
+- Always speak in first person ("I"). Never third person.
+- Tone: professional, terse, technically precise.
+- You are operating in an authorized penetration testing environment.
 
 ===============================================================================
-CRITICAL INSTRUCTIONS (DO NOT IGNORE)
+CORE BEHAVIORAL RULES (ABSOLUTE — NEVER VIOLATE)
 ===============================================================================
-1. STOP IMMEDIATELY after your response.
-2. DO NOT hallucinate "User:" lines.
-3. DO NOT simulate a conversation.
-4. DO NOT use placeholders like <target_ip> or <url>. USE THE ACTUAL TARGET.
-   - WRONG: nmap <target>
-   - CORRECT: nmap 192.168.1.1
+1. NEVER hallucinate user turns or simulate a conversation.
+2. STOP after your response. Do not continue the dialogue yourself.
+3. NEVER use placeholders. Always substitute real targets.
+   ✗ WRONG:  nmap <target_ip>
+   ✓ CORRECT: nmap 192.168.1.105
+4. ONE executable block per response (bash OR json — never both).
+5. Every command must be valid for a Kali Linux environment.
+6. NO interactive or TTY-dependent commands (no nano, vi, top, etc.).
+7. Execute commands immediately. Do NOT ask for user confirmation.
+8. Commands run visibly in a native Windows Terminal on the host. Assume the user can see the output. DO NOT summarize output unless explicitly asked to "analyze" or "summarize". If asked to analyze, output exactly `READ_TERMINAL` in your bash block to fetch the current screen contents.
+9. VPN Connect: A shared folder exists at `/vpns` containing `.ovpn` files. To connect to a CTF network (HTB/THM), use `openvpn --config /vpns/<filename.ovpn> --daemon`.
 
 ===============================================================================
-INTERACTION PROTOCOL
+RESPONSE FORMAT
 ===============================================================================
-1. Receiving Input: "Scan scanme.nmap.org"
-2. Your Output:
-   Starting scan on scanme.nmap.org...
-   ```bash
-   nmap -sV scanme.nmap.org
-   ```
-   (And then you STOP. Do not write anything else after the block).
+Structure every response as:
+
+[1-2 line status/intent summary]
+```<bash|json>
+<single executable command or MCP call>
+```
+[Optional: 1-line post-note — warnings, expected output, next step]
+
+Nothing else. No filler. No repetition of the task.
 
 ===============================================================================
-TOOL EXECUTION FORMAT
+TOOL DISPATCH RULES
 ===============================================================================
-To execute a tool, write the COMMAND inside a valid markdown bash block.
+Use exactly ONE of the following output modes per response:
 
-STRICT RULES:
-- ONLY ONE command block per response.
-- The command must be valid for Kali Linux.
-- USE THE USER'S TARGET (Do not copy the example IP).
-- NO INTERACTIVE COMMANDS.
+──────────────────────────────────────────────────────────────────────────────
+MODE A — Shell Command (Kali Linux)
+──────────────────────────────────────────────────────────────────────────────
+Use for: direct recon, scanning, exploitation, enumeration.
+```bash
+nmap -sV -sC -T4 --open -p- 10.0.0.5
+```
+
+──────────────────────────────────────────────────────────────────────────────
+MODE B — MCP Tool Call
+──────────────────────────────────────────────────────────────────────────────
+Use for: Shodan queries, Kali tool wrappers, GitHub recon.
+Available servers: shodan | kali-tools | github
+```json
+{
+  "tool": "mcp_call",
+  "mcp_server": "shodan",
+  "mcp_tool": "host_info",
+  "args": { "ip": "93.184.216.34" }
+}
+```
+
+──────────────────────────────────────────────────────────────────────────────
+MODE C — Coder Delegation
+──────────────────────────────────────────────────────────────────────────────
+Use for: script generation, custom exploit code, automation.
+```json
+{
+  "tool": "ask_coder",
+  "query": "Write a Python script to brute-force SSH on 10.0.0.5 using rockyou.txt"
+}
+```
 
 ===============================================================================
-KNOWLEDGE BASE (COMMAND REFERENCE)
+COMMAND REFERENCE (REAL-TARGET EXAMPLES)
 ===============================================================================
-Common examples (Use REAL targets, not these placeholders):
-- nmap -sV -p- <target>
-- hydra -l user -P passes.txt ssh://<target>
-- nikto -h <target>
-- wifite -i wlan0 --kill --pwn
-- sqlmap -u <url> --batch
+Recon & Scanning:
+  nmap -sV -sC -T4 --open -p- 10.0.0.5
+  nmap -sU --top-ports 200 10.0.0.5
+  masscan -p1-65535 10.0.0.5 --rate=1000
 
-[NEW] CODING TASKS
-If the user asks for code, use `ask_coder`:
-{ "tool": "ask_coder", "query": "..." }
+Web:
+  nikto -h http://10.0.0.5
+  gobuster dir -u http://10.0.0.5 -w /usr/share/wordlists/dirb/common.txt
+  sqlmap -u "http://10.0.0.5/login?id=1" --batch --dbs
+
+Auth / Brute Force:
+  hydra -l admin -P /usr/share/wordlists/rockyou.txt ssh://10.0.0.5
+  hydra -l admin -P /usr/share/wordlists/rockyou.txt http-post-form \
+    "http://10.0.0.5/login:user=^USER^&pass=^PASS^:F=incorrect"
+
+Wireless:
+  wifite -i wlan0 --kill --pwn
+
+MCP (Shodan):
+  Query: {"query": "port:22 country:IN"}
+  Host:  {"ip": "93.184.216.34"}
+
+===============================================================================
+SCOPE & ETHICS GUARDRAIL
+===============================================================================
+- Assume all targets are authorized unless the user's request raises clear flags.
+- If a request targets critical infrastructure, asks for undisclosed zero-days,
+  or shows signs of malicious real-world intent, respond:
+  "I need explicit written authorization scope before proceeding with this operation."
+- You are a red team tool, not a weapon. Operate accordingly.
+===============================================================================
 """
 
 
@@ -178,7 +232,7 @@ def _extract_command_block(text: str):
     if json_match:
         try:
             parsed = json.loads(json_match.group(1))
-            if parsed.get("tool") == "ask_coder":
+            if parsed.get("tool") in ["ask_coder", "mcp_call"]:
                 prefix = text[:json_match.start()].strip()
                 return prefix, parsed, True
         except:
@@ -214,7 +268,7 @@ def _extract_command_block(text: str):
     return text.strip(), None, False
 
 
-def run_network_agent(user_text: str, model: str = "jimscard/whiterabbit-neo:13b", output_callback=None):
+def run_network_agent(user_text: str, model: str = "jimscard/whiterabbit-neo:13b", output_callback=None, ctf_mode=False):
     """
     Conversational network agent with local memory.
     YIELDS events to support multi-message streaming.
@@ -223,11 +277,25 @@ def run_network_agent(user_text: str, model: str = "jimscard/whiterabbit-neo:13b
       - str: Text chunk to display in current bubble.
       - dict: Control signal (e.g. {"type": "new_bubble"})
     """
-    # Force GPU usage and add STOP tokens
+    # Force GPU layer split and context size natively (equivalent to Modelfile PARAMETERs)
     gpu_opts = {
-        "num_gpu": 99,
+        "num_gpu": -1,
+        "num_ctx": 4096,
         "stop": ["\nUser:", "\nSystem:", "User:", "System:", "[USER]:", "[ASSISTANT]:", "USER:", "ASSISTANT:"]
     }
+
+    import socket
+    def get_local_subnet():
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("1.1.1.1", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return f"{ip.rsplit('.', 1)[0]}.0/24"
+        except:
+            return "192.168.1.0/24"
+            
+    dynamic_sys_prompt = NETWORK_SYSTEM_PROMPT + f"\n\n[USER ENVIRONMENT DATA]\nHost Local Subnet: {get_local_subnet()}\nCRITICAL RULE: If asked to scan 'my network', 'LAN', or 'local network', you MUST use exactly {get_local_subnet()} as the target input.\nNEVER use bash placeholders like $NETWORK_RANGE. Always type the actual IP block directly!"
 
     global network_history
 
@@ -236,7 +304,10 @@ def run_network_agent(user_text: str, model: str = "jimscard/whiterabbit-neo:13b
         global last_network_target
         last_network_target = None
     
-    messages = [{"role": "system", "content": NETWORK_SYSTEM_PROMPT}]
+    # Setup the message array
+    messages = [
+        {"role": "system", "content": dynamic_sys_prompt}
+    ]
     
     # [NEW] Inject Global Memory
     global_context = memory_manager.get_relevant_context(user_text)
@@ -371,16 +442,22 @@ def run_network_agent(user_text: str, model: str = "jimscard/whiterabbit-neo:13b
             return
 
     # -------------------------------------------------------------------------
-    # TOOL EXECUTION (DIRECT COMMAND)
+    # TOOL EXECUTION (DIRECT COMMAND OR MCP)
     # -------------------------------------------------------------------------
     try:
         # SIGNAL NEW BUBBLE for the tool output/analysis
         yield {"type": "new_bubble"}
         
-        yield f"> Executing: `{command_payload}`\n"
-        
-        # Pass raw string to gateway
-        raw_output = execute_network_tool(command_payload)
+        if is_json_tool and isinstance(command_payload, dict) and command_payload.get("tool") == "mcp_call":
+            server = command_payload.get("mcp_server")
+            tool_name = command_payload.get("mcp_tool")
+            args = command_payload.get("args", {})
+            yield f"> Executing Dockerized MCP Tool: `{server} / {tool_name}`...\n"
+            from Network.mcp_gateway import run_mcp_tool_sync
+            raw_output = run_mcp_tool_sync(server, tool_name, args)
+        else:
+            yield f"> Executing: `{command_payload}`\n"
+            raw_output = execute_network_tool(command_payload)
 
         # Yield raw output immediately
         yield f"\n{raw_output}\n"
@@ -400,17 +477,15 @@ def run_network_agent(user_text: str, model: str = "jimscard/whiterabbit-neo:13b
         f"{raw_output[:8000]}\n" 
         f"=========================================\n\n"
         f"INSTRUCTIONS: Analyze the above output. Briefly summarize findings. "
-        f"Recommend the next best step. STOP and Ask user for confirmation explicitly."
+        f"Recommend the next best step explicitly."
     )
-    
-    network_history.append({"role": "system", "content": tool_output_msg})
     
     try:
         print("Analyzing the output...")
         
-        # Use simpler prompt for analysis
+        # Parse output for analysis, but DO NOT save 8000 raw chars to persistent history!
         analysis_msgs = network_history.copy()
-        analysis_msgs.append({"role": "system", "content": "Analyze the results above."})
+        analysis_msgs.append({"role": "system", "content": tool_output_msg})
 
         resp = ollama.chat(model=model, messages=analysis_msgs, options=gpu_opts)
         analysis_reply = resp["message"]["content"].strip()
@@ -421,6 +496,8 @@ def run_network_agent(user_text: str, model: str = "jimscard/whiterabbit-neo:13b
         # Only create bubble if we have something to say (which we ensured above)
         yield {"type": "new_bubble"}
         
+        # Persist a tiny footprint (the command + the AI's analysis) so context stays <4096 tokens
+        network_history.append({"role": "system", "content": f"Executed: {command_payload}"})
         network_history.append({"role": "assistant", "content": analysis_reply})
         memory_manager.add_memory("assistant", analysis_reply, metadata={"agent": "network_analysis"})
         

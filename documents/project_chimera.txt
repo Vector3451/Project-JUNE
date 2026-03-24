@@ -1,3 +1,0 @@
-This is a test document for the auto-ingestion system.
-If this file is ingested, the AI should know about "Project Chimera".
-Project Chimera is a secret initiative to build a better coffee machine.
